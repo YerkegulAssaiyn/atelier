@@ -27,7 +27,34 @@ HEADERS = {
 }
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")  # запасной вариант, если Worker недоступен
+WORKER_URL = os.environ.get("WORKER_URL")  # напр. https://atelier-bot.assaiynerkegul.workers.dev/subscribers
+WORKER_API_KEY = os.environ.get("WORKER_API_KEY")
+
+
+def get_subscribers():
+    """Берёт список chat_id подписчиков с Cloudflare Worker.
+    Если Worker недоступен — используем запасной TELEGRAM_CHAT_ID."""
+    if WORKER_URL and WORKER_API_KEY:
+        try:
+            resp = requests.get(
+                WORKER_URL,
+                headers={"X-API-Key": WORKER_API_KEY},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            ids = resp.json()
+            if ids:
+                print(f"Подписчиков через Worker: {len(ids)}")
+                return [str(i) for i in ids]
+        except requests.RequestException as e:
+            print(f"[worker] не удалось получить список подписчиков: {e}")
+
+    if TELEGRAM_CHAT_ID:
+        print("Использую запасной TELEGRAM_CHAT_ID")
+        return [TELEGRAM_CHAT_ID]
+
+    return []
 
 
 # ---------- Хранилище уже виденных объявлений ----------
@@ -157,22 +184,22 @@ def get_olx_listings(budget=BUDGET_MAX):
 
 
 # ---------- Telegram ----------
-def send_telegram(text):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Telegram не настроен (нет TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID). Вывожу в консоль:\n", text)
+def send_telegram(chat_id, text):
+    if not TELEGRAM_TOKEN:
+        print("Telegram не настроен (нет TELEGRAM_BOT_TOKEN). Вывожу в консоль:\n", text)
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
         r = requests.post(url, data={
-            "chat_id": TELEGRAM_CHAT_ID,
+            "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         }, timeout=15)
         if not r.ok:
-            print("Ошибка отправки в Telegram:", r.text)
+            print(f"Ошибка отправки в Telegram (chat_id={chat_id}):", r.text)
     except requests.RequestException as e:
-        print("Ошибка отправки в Telegram:", e)
+        print(f"Ошибка отправки в Telegram (chat_id={chat_id}):", e)
 
 
 def format_listing(item):
@@ -195,12 +222,18 @@ def main():
 
     print(f"Новых объявлений: {len(new_listings)}")
 
-    if new_listings:
+    subscribers = get_subscribers()
+    print(f"Получателей рассылки: {len(subscribers)}")
+
+    if new_listings and subscribers:
         header = f"🔎 Новые варианты помещений под ателье в Астане (до {BUDGET_MAX:,} ₸/мес):\n\n".replace(",", " ")
-        send_telegram(header.strip())
-        for item in new_listings:
-            send_telegram(format_listing(item))
-            time.sleep(0.5)
+        for chat_id in subscribers:
+            send_telegram(chat_id, header.strip())
+            for item in new_listings:
+                send_telegram(chat_id, format_listing(item))
+                time.sleep(0.3)
+    elif not subscribers:
+        print("Нет ни одного подписчика — рассылку некому отправлять.")
     else:
         print("Новых объявлений нет — уведомление не отправляется.")
 

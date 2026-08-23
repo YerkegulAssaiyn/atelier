@@ -27,6 +27,8 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          WORKER_API_KEY: ${{ secrets.WORKER_API_KEY }}
         run: python search.py
 
       - name: Save seen listings

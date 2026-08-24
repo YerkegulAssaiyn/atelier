@@ -23,7 +23,17 @@ OLX_URL = "https://www.olx.kz/nedvizhimost/kommercheskie-pomeshcheniya/arenda/as
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Referer": "https://www.olx.kz/",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+    "Cache-Control": "max-age=0",
 }
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -143,8 +153,14 @@ def get_krisha_listings(budget=BUDGET_MAX, max_pages=MAX_KRISHA_PAGES):
 # ---------- OLX.kz ----------
 def get_olx_listings(budget=BUDGET_MAX):
     results = []
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
     try:
-        resp = requests.get(OLX_URL, headers=HEADERS, timeout=20)
+        # "прогреваем" сессию визитом на главную — иногда снимает часть защиты
+        session.get("https://www.olx.kz/", timeout=15)
+        time.sleep(1)
+        resp = session.get(OLX_URL, timeout=20)
         resp.raise_for_status()
     except requests.RequestException as e:
         print(f"[olx] ошибка запроса: {e}")
